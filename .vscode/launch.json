@@ -1,0 +1,18 @@
+{
+  // https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: debug app",
+      "type": "python",
+      "request": "launch",
+      "module": "asy",
+      "args": [
+        "--reload",
+        "dev:consume",
+        "dev:enqueu_job_every_seconds",
+      ],
+      "justMyCode": false
+    }
+  ]
+}

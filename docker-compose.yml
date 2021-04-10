@@ -1,0 +1,27 @@
+version: "3"
+services:
+  python:
+    depends_on:
+      - rabbitmq
+    build:
+      context: .
+      dockerfile: Dockerfile
+    #   args:
+    #     CONTAINER_USER_ID: ${CONTAINER_USER_ID}
+    #     CONTAINER_GROUP_ID: ${CONTAINER_GROUP_ID}
+    # ports:
+    #   - "5900:5900" # VNC　defualtはsecretでログイン
+    #   - "80:80"
+    #   - "8080:8080" # restapi
+    #   - "8888:8888" # jupyter
+    #   - "8501:8501" # streamlit
+    #   - "2222:22" # SSH
+    #   - "5678:5678" # pydebug
+    volumes:
+      - .:/app:rw
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - 5672:5672 # queue port
+      - 15672:15672 #rabbitmq management console guest:guest
