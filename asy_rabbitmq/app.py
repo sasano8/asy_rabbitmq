@@ -5,7 +5,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from json import dumps
-from typing import Awaitable, Callable, TypeVar, Union
+from typing import Callable, TypeVar
 
 import asy
 import pika
@@ -16,15 +16,11 @@ from pydantic import BaseModel, Field
 from .utils import is_coroutine_callable
 from .func import FuncMimicry
 
-# from framework.analyzers import FuncAnalyzer
-# from pp import FuncMimicry
-
-from .mock import MockBlockingConnection
 
 F = TypeVar("F", bound=Callable)
 
 
-class RabbitmqParam(pika.ConnectionParameters):
+class Rabbitmq(pika.ConnectionParameters):
     def consumer(
         self,
         queue_name: str,  # キューのオプション
@@ -35,20 +31,19 @@ class RabbitmqParam(pika.ConnectionParameters):
         # arguments=...,  # キューのオプション
         auto_ack: bool = False,  # consumerのオプション
     ) -> Consumer:
-        connector = Connector(self)
         consumer = Consumer(queue_name=queue_name, durable=durable, auto_ack=auto_ack)
+        connector = Connector(self)
         consumer.depends_on(connector)
         return consumer
 
+    def create_connection(self):
+        return pika.BlockingConnection(self)
+
 
 class Connector:
-    def __init__(self, params: pika.ConnectionParameters, is_mock: bool = False):
+    def __init__(self, params: Rabbitmq):
         self.params = params
-        self.is_mock = is_mock
-        if self.is_mock:
-            self.create_connection = lambda: MockBlockingConnection(self.params)
-        else:
-            self.create_connection = lambda: pika.BlockingConnection(self.params)
+        self.create_connection = params.create_connection
         self.clear()
 
     def clear(self):
@@ -81,15 +76,6 @@ class Connector:
         self.conn = self.create_connection()
         return self.conn
 
-    # def establish_conn(self):
-    #     if self.conn and self.conn.is_open:
-    #         return
-
-    #     if self.is_mock:
-    #         self.conn: pika.BlockingConnection = MockBlockingConnection(self.params)
-    #     else:
-    #         self.conn = pika.BlockingConnection(self.params)
-
     def release_conn(self):
         self.__del__()
 
@@ -106,74 +92,6 @@ class Connector:
     #             await asyncio.sleep(1)
 
     #     self.release_conn()
-
-
-@dataclass
-class Rabbitmq:
-    """コルーチンを実行すると自動的にRabbitMQへの接続確立と回復を行う。"""
-
-    url: str
-    is_mock: bool = False  # サーバにRabbitMQのモックを使用する。テスト時などに使用。挙動は完全にエミュレートされていない。
-    is_cancelled: bool = field(default=False, init=False)
-    conn: pika.BlockingConnection = field(default=None, init=False)
-
-    def __post_init__(self):
-        pass
-
-    async def get_conn(self):
-        while not (self.conn and self.conn.is_open):
-            await asyncio.sleep(1)
-
-        return self.conn
-
-    def establish_conn(self):
-        if self.conn and self.conn.is_open:
-            return
-
-        if self.is_mock:
-            param = pika.ConnectionParameters(self.url)
-            self.conn: pika.BlockingConnection = MockBlockingConnection(param)
-        else:
-            param = pika.ConnectionParameters(self.url)
-            self.conn = pika.BlockingConnection(param)
-
-    def release_conn(self):
-        self.is_cancelled = True
-        if self.conn is None:
-            return
-
-        conn = self.conn
-        self.conn = None
-        if conn.is_open:
-            conn.close()
-
-    async def __call__(self, token: asy.PCancelToken):
-        """キャンセルされるまでコネクションを自動で確立する"""
-        while not token.is_cancelled:
-            try:
-                self.establish_conn()
-                await asyncio.sleep(10)
-            except exceptions.AMQPError as e:
-                import traceback
-
-                print(traceback.format_exc())
-                await asyncio.sleep(1)
-
-        self.release_conn()
-
-    def consumer(
-        self,
-        queue_name: str,  # キューのオプション
-        durable: bool = True,  # キューのオプション
-        # passive: bool = ...,  # キューのオプション
-        # exclusive: bool = ...,  # キューのオプション
-        # auto_delete: bool = ...,  # キューのオプション
-        # arguments=...,  # キューのオプション
-        auto_ack: bool = False,  # consumerのオプション
-    ) -> Consumer:
-        consumer = Consumer(queue_name=queue_name, durable=durable, auto_ack=auto_ack)
-        consumer.depends_on(self)
-        return consumer
 
 
 @dataclass

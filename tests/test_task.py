@@ -1,7 +1,6 @@
 import asyncio
 import inspect
 
-import asy_rabbitmq as rabbitmq
 from asy_rabbitmq import Rabbitmq, Task
 
 
@@ -35,7 +34,7 @@ def test_behavior():
 
 
 def test_decorator():
-    rabbitmq = Rabbitmq(url="rabbitmq")
+    rabbitmq = Rabbitmq(host="rabbitmq")
     consumer = rabbitmq.consumer(queue_name="test_mock_queue")
 
     result = None

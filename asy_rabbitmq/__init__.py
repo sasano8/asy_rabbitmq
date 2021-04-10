@@ -1,1 +1,1 @@
-from .app import Consumer, Rabbitmq, Task, RabbitmqParam
+from .app import Consumer, Task, Rabbitmq

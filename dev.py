@@ -1,11 +1,9 @@
 import asyncio
 from random import random
 
+from asy_rabbitmq import Rabbitmq
 
-from asy_rabbitmq import RabbitmqParam
-
-
-param = RabbitmqParam(host="rabbitmq")
+param = Rabbitmq(host="rabbitmq")
 consume = param.consumer(queue_name="default")
 
 

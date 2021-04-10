@@ -5,10 +5,16 @@ from typing import Any, Dict, List, Tuple
 import pika
 from pika import exceptions
 from pika.adapters.blocking_connection import BlockingChannel
+from .app import Rabbitmq
 
 
 class Dummy:
     pass
+
+
+class MockRabbitmq(Rabbitmq):
+    def create_connection(self):
+        return MockBlockingConnection(self)
 
 
 class MockBlockingConnection:
