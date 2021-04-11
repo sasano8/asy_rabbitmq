@@ -1,6 +1,8 @@
+from typing import Callable, TypeVar
+
 from fastapi_di import DI
 from fastapi_di import Task as TaskBase
-from typing import Callable, TypeVar
+
 from .caller import CallInfo
 
 F = TypeVar("F", bound=Callable)
@@ -16,7 +18,8 @@ class Task(TaskBase[F]):
 
     def _delay(self, **kwargs) -> None:
         task = CallInfo(func=self.__name__, kwargs=kwargs)
-        self.consumer.basic_publish(task)
+        result = self.consumer.basic_publish(task)
+        return result
 
 
 class RabbitmqDI(DI):

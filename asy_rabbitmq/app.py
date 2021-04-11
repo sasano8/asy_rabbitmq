@@ -4,20 +4,18 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Callable, Dict, TypeVar
 from functools import partial
+from typing import Callable, Dict, TypeVar
 
 import asy
 import pika
-
 from pika import exceptions
 from pika.adapters.blocking_connection import BlockingChannel
 
-from .utils import is_coroutine_callable
-from .func import FuncMimicry
-from .dependency import RabbitmqDI, Task
 from .caller import CallInfo
-
+from .dependency import RabbitmqDI, Task
+from .func import FuncMimicry
+from .utils import is_coroutine_callable
 
 F = TypeVar("F", bound=Callable)
 
@@ -150,7 +148,7 @@ class Consumer:
         #     raise exceptions.AMQPChannelError("Channel is not open.")
         json_str = body.encode()
 
-        channel.basic_publish(
+        return channel.basic_publish(
             exchange=exchange, routing_key=self.queue_name, body=json_str
         )
 
