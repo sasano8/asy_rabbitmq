@@ -4,18 +4,19 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from json import dumps
 from typing import Callable, Dict, TypeVar
 from functools import partial
 
 import asy
 import pika
-from fastapi.encoders import jsonable_encoder
+
 from pika import exceptions
 from pika.adapters.blocking_connection import BlockingChannel
-from pydantic import BaseModel, Field
+
 from .utils import is_coroutine_callable
 from .func import FuncMimicry
+from .dependency import RabbitmqDI, Task
+from .caller import CallInfo
 
 
 F = TypeVar("F", bound=Callable)
@@ -80,20 +81,6 @@ class Connector:
     def release_conn(self):
         self.__del__()
 
-    # async def __call__(self, token: asy.PCancelToken):
-    #     """キャンセルされるまでコネクションを自動で確立する"""
-    #     while not token.is_cancelled:
-    #         try:
-    #             self.establish_conn()
-    #             await asyncio.sleep(10)
-    #         except exceptions.AMQPError as e:
-    #             import traceback
-
-    #             print(traceback.format_exc())
-    #             await asyncio.sleep(1)
-
-    #     self.release_conn()
-
 
 @dataclass
 class Consumer:
@@ -119,6 +106,7 @@ class Consumer:
         self.tasks: Dict[str, Task] = {}
         self.logger = logging.getLogger(__name__)
         self.connector = None
+        self.di = RabbitmqDI()
 
     def depends_on(self, connector: Rabbitmq):
         self.connector = connector
@@ -143,10 +131,10 @@ class Consumer:
         self.tasks[task.__name__] = task
 
     def task(self, func: F) -> Task[F]:
-        new_func = Task(func)
-        new_func.depends_on(self)
-        self._add_task(new_func)
-        return new_func
+        new_task = self.di.task()(func)
+        new_task.depends_consumer(self)
+        self._add_task(new_task)
+        return new_task
 
     def basic_publish(self, body: CallInfo, *, exchange="") -> None:
         if not self.channel:
@@ -221,10 +209,12 @@ class Consumer:
         line = task.__code__.co_firstlineno
 
         try:
-            await task(**body.kwargs)
+            result = await task.do(**body.kwargs)
             self.logger.info(f"[SUCCESS]{file} {line} {func_name}(**{body.kwargs!r})")
         except Exception as e:
-            self.logger.warning(f"[FAILED]{file} {line} {func_name}(**{body.kwargs!r})")
+            self.logger.warning(
+                f"[FAILED]{file} {line} {func_name}(**{body.kwargs!r}) {e}"
+            )
 
             # TODO: 処理が数回失敗した場合は、デッドレターキューに格納する（現在はとりあえず削除）
             # channel.basic_reject(delivery_tag=method.delivery_tag, requeue=False)  # メッセージを破棄する
@@ -233,26 +223,3 @@ class Consumer:
 
         if not self.auto_ack:
             channel.basic_ack(delivery_tag=method.delivery_tag)
-
-
-class Task(FuncMimicry[F]):
-    def depends_on(self, consumer: Consumer) -> None:
-        self.consumer = consumer
-
-    @property
-    def delay(self) -> F:
-        return self._delay  # type: ignore
-
-    def _delay(self, **kwargs) -> None:
-        task = CallInfo(func=self.__name__, kwargs=kwargs)
-        self.consumer.basic_publish(task)
-
-
-class CallInfo(BaseModel):
-    func: str = Field(description="実行する関数")
-    # args: tuple = Field(description="実行する関数に渡す位置引数")
-    kwargs: dict = Field(description="実行する関数に渡すキーワード引数")
-
-    def encode(self) -> str:
-        dic = jsonable_encoder(self)
-        return dumps(dic, ensure_ascii=False)

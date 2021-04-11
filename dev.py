@@ -1,10 +1,10 @@
 import asyncio
 from random import random
-
+from fastapi import Depends
 from asy_rabbitmq import Rabbitmq
 
-param = Rabbitmq(host="rabbitmq")
-consume = param.consumer(queue_name="default")
+rabbitmq = Rabbitmq(host="rabbitmq")
+consume = rabbitmq.consumer(queue_name="default")
 
 
 async def enqueu_job_every_seconds():
@@ -13,6 +13,15 @@ async def enqueu_job_every_seconds():
         await asyncio.sleep(1)
 
 
+def get_template():
+    return "hello!!!!"
+
+
+def get_message(msg=Depends(get_template)):
+    yield msg
+
+
 @consume.task
-async def print_value(value):
-    print("get: " + str(value))
+async def print_value(value, msg=Depends(get_message)):
+    print(f"{msg} {value}")
+    return value
