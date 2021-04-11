@@ -10,5 +10,4 @@ def test_manage_delay_task():
         return msg
 
     assert func.delay
-    func.delay("a", 1, 2, 3, 4)
-    # TODO: 引数の事前検証を実装する
+    func.delay(msg="a")
