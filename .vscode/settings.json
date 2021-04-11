@@ -1,5 +1,6 @@
 {
   "python.pythonPath": "/usr/local",
+  // "python.pythonPath": "${workspaceFolder}/.venv",
   "editor.formatOnSave": true,
   "python.linting.lintOnSave": true,
   "python.linting.enabled": true,

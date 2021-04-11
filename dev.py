@@ -9,7 +9,7 @@ consume = param.consumer(queue_name="default")
 
 async def enqueu_job_every_seconds():
     while True:
-        print_value.delay(random())
+        print_value.delay(value=random())
         await asyncio.sleep(1)
 
 

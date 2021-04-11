@@ -47,6 +47,14 @@ class FuncMimicry(Delegator[F], PFuncWrapper[F]):
         self.__defaults__ = func.__defaults__  # type: ignore
         self.__kwdefaults__ = func.__kwdefaults__  # type: ignore
 
+    def __str__(self) -> str:
+        result = self.__root__.__str__()
+        return result
+
+    def __repr__(self) -> str:
+        result = self.__root__.__repr__()
+        return result
+
     @property
     def __call__(self) -> F:
         return self.__wrapped__

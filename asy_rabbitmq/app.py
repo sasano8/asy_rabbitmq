@@ -5,7 +5,8 @@ import json
 import logging
 from dataclasses import dataclass, field
 from json import dumps
-from typing import Callable, TypeVar
+from typing import Callable, Dict, TypeVar
+from functools import partial
 
 import asy
 import pika
@@ -115,7 +116,7 @@ class Consumer:
 
     def __post_init__(self):
         self.channel: BlockingChannel = None
-        self.functions = {}
+        self.tasks: Dict[str, Task] = {}
         self.logger = logging.getLogger(__name__)
         self.connector = None
 
@@ -137,11 +138,11 @@ class Consumer:
         return self.channel
 
     def _add_task(self, task: Task):
-        if task.__name__ in self.functions:
+        if task.__name__ in self.tasks:
             raise KeyError(f"duplicate function name: {task.__name__}")
-        self.functions[task.__name__] = task
+        self.tasks[task.__name__] = task
 
-    def task(self, func):
+    def task(self, func: F) -> Task[F]:
         new_func = Task(func)
         new_func.depends_on(self)
         self._add_task(new_func)
@@ -164,6 +165,13 @@ class Consumer:
         channel.basic_publish(
             exchange=exchange, routing_key=self.queue_name, body=json_str
         )
+
+    def __aiter__(self):
+        pass
+
+    async def __anext__(self):
+        return 1
+        raise StopAsyncIteration
 
     async def __call__(self, token: asy.PCancelToken):
         assert not token.is_cancelled
@@ -203,24 +211,20 @@ class Consumer:
         properties,
         body: CallInfo,
     ):
-        func = self.functions[body.func]
+        task = self.tasks[body.func]
 
-        if not is_coroutine_callable(func):
-            raise Exception(f"{func.__name__} is not coroutine function.")
+        if not is_coroutine_callable(task):
+            raise Exception(f"{task.__name__} is not coroutine function.")
 
         func_name = body.func
-        file = func.__code__.co_filename
-        line = func.__code__.co_firstlineno
+        file = task.__code__.co_filename
+        line = task.__code__.co_firstlineno
 
         try:
-            await func(*body.args, **body.kwargs)
-            self.logger.info(
-                f"[SUCCESS]{file} {line} {func_name}({body.args!r}, {body.kwargs!r})"
-            )
+            await task(**body.kwargs)
+            self.logger.info(f"[SUCCESS]{file} {line} {func_name}(**{body.kwargs!r})")
         except Exception as e:
-            self.logger.warning(
-                f"[FAILED]{file} {line} {func_name}({body.args!r}, {body.kwargs!r})"
-            )
+            self.logger.warning(f"[FAILED]{file} {line} {func_name}(**{body.kwargs!r})")
 
             # TODO: 処理が数回失敗した場合は、デッドレターキューに格納する（現在はとりあえず削除）
             # channel.basic_reject(delivery_tag=method.delivery_tag, requeue=False)  # メッセージを破棄する
@@ -239,14 +243,14 @@ class Task(FuncMimicry[F]):
     def delay(self) -> F:
         return self._delay  # type: ignore
 
-    def _delay(self, *args, **kwargs) -> None:
-        task = CallInfo(func=self.__name__, args=args, kwargs=kwargs)
+    def _delay(self, **kwargs) -> None:
+        task = CallInfo(func=self.__name__, kwargs=kwargs)
         self.consumer.basic_publish(task)
 
 
 class CallInfo(BaseModel):
     func: str = Field(description="実行する関数")
-    args: tuple = Field(description="実行する関数に渡す位置引数")
+    # args: tuple = Field(description="実行する関数に渡す位置引数")
     kwargs: dict = Field(description="実行する関数に渡すキーワード引数")
 
     def encode(self) -> str:
